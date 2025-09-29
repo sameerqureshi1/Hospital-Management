@@ -3,7 +3,7 @@ name: Deploy Hospital Management Website
 on:
   push:
     branches:
-      - master   # or your branch
+      - master   # 👈 change if your branch is different
 
 jobs:
   deploy:
@@ -22,18 +22,12 @@ jobs:
       - name: Save Docker Image
         run: docker save hospital-management:latest -o hospital-management.tar
 
-      # Copy Docker image to Remote VM (fixed: no tar conflict)
+      # Copy Docker image to Remote VM using scp
       - name: Copy Docker Image to Remote VM
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.REMOTE_HOST }}
-          username: ${{ secrets.REMOTE_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "hospital-management.tar"
-          target: "~/hospital-management.tar"
-          overwrite: true
-          strip_components: 0
-          tar_exec: ""   # 👈 disable tar packaging to avoid "Permission denied"
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+          scp -i private_key.pem -o StrictHostKeyChecking=no hospital-management.tar ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/${{ secrets.REMOTE_USER }}/hospital-management.tar
 
       # Load & Run container on VM
       - name: Deploy on Remote VM
@@ -43,7 +37,7 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            docker load -i ~/hospital-management.tar
+            docker load -i hospital-management.tar
             docker stop hospital-app || true
             docker rm hospital-app || true
             docker run -d -p 8086:80 --name hospital-app hospital-management:latest
