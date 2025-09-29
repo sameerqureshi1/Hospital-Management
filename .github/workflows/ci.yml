@@ -3,22 +3,26 @@ name: Deploy Hospital Management Website
 on:
   push:
     branches:
-      - master
+      - master   # or your branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout code
       - name: Checkout Repository
         uses: actions/checkout@v3
 
+      # Build Docker image
       - name: Build Docker Image
         run: docker build -t hospital-management:latest .
 
+      # Save Docker image to tar
       - name: Save Docker Image
         run: docker save hospital-management:latest -o hospital-management.tar
 
+      # Copy Docker image to Remote VM (fixed: no tar conflict)
       - name: Copy Docker Image to Remote VM
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -27,7 +31,11 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "hospital-management.tar"
           target: "~/hospital-management.tar"
+          overwrite: true
+          strip_components: 0
+          tar_exec: ""   # 👈 disable tar packaging to avoid "Permission denied"
 
+      # Load & Run container on VM
       - name: Deploy on Remote VM
         uses: appleboy/ssh-action@v0.1.8
         with:
@@ -35,7 +43,7 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            docker load -i hospital-management.tar
+            docker load -i ~/hospital-management.tar
             docker stop hospital-app || true
             docker rm hospital-app || true
             docker run -d -p 8086:80 --name hospital-app hospital-management:latest
