@@ -1,46 +1,43 @@
-name: Deploy Hospital Management Website
+name: Deploy Hospital Management App
 
 on:
   push:
     branches:
-      - master   # or your branch
+      - master   
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout code
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Build Docker image
-      - name: Build Docker Image
-        run: docker build -t hospital-management:latest .
-
-      # Save Docker image to tar
-      - name: Save Docker Image
-        run: docker save hospital-management:latest -o hospital-management.tar
-
-      # Copy Docker image to Remote VM
-      - name: Copy Docker Image to Remote VM
+      - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "hospital-management.tar"
-          target: "/home/${{ secrets.REMOTE_USER }}/hospital-management.tar"
+          source: "./*"
+          target: "/home/ubuntu/hospital-app"
+          overwrite: true
+          strip_components: 1
 
-      # Load & Run container on VM
-      - name: Deploy on Remote VM
-        uses: appleboy/ssh-action@v0.1.8
+      - name: Deploy on EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            docker load -i hospital-management.tar
+            cd /home/ubuntu/hospital-app
+            # Stop old container if running
             docker stop hospital-app || true
             docker rm hospital-app || true
+
+            # Build new image
+            docker build -t hospital-management:latest .
+
+            # Run new container (host port 8086 -> container port 80)
             docker run -d -p 8086:80 --name hospital-app hospital-management:latest
